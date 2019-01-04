@@ -11,7 +11,7 @@ import tensorflow as tf
 # Now lets setup the data
 def import_pickled_data(string):
     import gzip, cPickle
-    f = gzip.open('../data/'+string+'.pkl.gz','rb')
+    f = gzip.open(string+'.pkl.gz','rb')
     dataset = cPickle.load(f)
     X_train = dataset[0]
     X_test  = dataset[1]
@@ -92,10 +92,11 @@ def comparison(XTrain, yTrain, XTest, yTest):
     names = ["Nearest Neighbors", "Linear SVM", 
          "Decision Tree", "Random Forest", "Neural Net", "AdaBoost",
          "Naive Bayes", "QDA", "LDA"]
-
+    from  mpu.ml import one_hot2indices 
+    yTrain =  np.asarray(one_hot2indices (yTrain))
+    yTest  =  np.asarray(one_hot2indices (yTest))
     classifiers = [
     KNeighborsClassifier(3),
-    SVC(kernel="linear", C=0.025),
     DecisionTreeClassifier(max_depth=5),
     RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
     MLPClassifier(alpha=1),
@@ -104,23 +105,22 @@ def comparison(XTrain, yTrain, XTest, yTest):
     QuadraticDiscriminantAnalysis(), 
     LinearDiscriminantAnalysis()
     ]
-    s =[]
     score = []
     # iterate over classifiers
     for name, clf in zip(names, classifiers):
         clf.fit(XTrain, yTrain)
         score.append(clf.score(XTest, yTest))
-        labels = clf.predict(XTest)
-        i = int(max(labels)-1)
-        p_value =0
-        index = [p for p,v in enumerate(yTest) if v == i]
-        index = [ int(x) for x in index ]
-        yTest= [ int(x) for x in yTest ]
-        L = [v for p,v in enumerate(labels) if p not in index]
-        p_value = ( (list(L).count(i)) )/float(len(labels));
-        s.append(p_value)
-    return names, np.array(score).reshape(1,9), np.array(s).reshape(1,9)
-
+        # labels = clf.predict(XTest)
+        # i = int(max(labels)-1)
+        # p_value =0
+        # index = [p for p,v in enumerate(yTest) if v == i]
+        # index = [ int(x) for x in index ]
+        # yTest= [ int(x) for x in yTest ]
+        # L = [v for p,v in enumerate(labels) if p not in index]
+        # p_value = ( (list(L).count(i)) )/float(len(labels));
+        # s.append(p_value)
+    # return names, np.array(score).reshape(1,9), np.array(s).reshape(1,9)
+    return names, np.array(score).reshape(1,8)
 
 ### 2 - Next the helper function for comparing dimension reduction
 def dim_reduction_comparison(dataset, n_comp):

@@ -42,7 +42,7 @@ def Dimension_Reduction():
 
                         # Reduced dimensions
                     Train_PCA = dims.fit_transform(X_train)
-                    Train_HDR, Test_HDR = reduced_dimension_data(X_train, X_train, [2, comp, 0.99])
+                    Train_HDR, Test_HDR = reduced_dimension_data(X_train, X_train, [2, comp, 0.90])
 
                     from sklearn.linear_model import LinearRegression        
                     lm = LinearRegression()

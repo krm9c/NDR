@@ -12,8 +12,8 @@ import SparsePCA
 # Append all the path
 sys.path.append('..//CommonLibrariesDissertation')
 path_store = '../FinalDistSamples/'
-## We have to now import our libraries
 
+## We have to now import our libraries
 from scipy import linalg as LA
 from scipy.sparse.linalg import eigsh
 from DistanceCov import dependence_calculation
@@ -32,12 +32,16 @@ class level():
 def novel_groups(T, g_size):
     R_label = [i for i in xrange(T.shape[1])]
     T_label = []
+
     start = 0;
     step = int(len(R_label)/float(g_size));
+
     for start in xrange(len(R_label)):
         T_label.extend( [ R_label[i] for i in xrange(start,int(len(R_label)),step)] )
+
         if(len(T_label)>=len(R_label)):
             break
+
     return np.array(T[:, T_label]), T_label
 
 def extract_samples(X, y, p):
@@ -47,10 +51,30 @@ def extract_samples(X, y, p):
 
 ## Data In
 # Generate reduction vectors
-def gen_red_vectors(r, Sigma):
-    U, s, V = np.linalg.svd(Sigma)
-    pc=  V[0:r,:]
-    return pc.T
+def gen_red_vectors(o_dim, Sigma, alpha):
+
+    if o_dim ==0:
+        # Next achieve the parameters for transformation
+        U, s, V = np.linalg.svd(Sigma)
+        e_vals  = LA.eigvals(Sigma)
+
+        # Calculate kappa
+        arg_sort  = e_vals.argsort()[::-1][:]
+        s_eigvals = e_vals[arg_sort]
+        d_eigvals = np.divide(s_eigvals, float(np.sum(s_eigvals)));
+        tempsum   = np.cumsum(d_eigvals)
+        mask      = tempsum >= alpha
+        kappa = ((len(tempsum)-len(tempsum[mask]))+1)
+
+        V  =  V[arg_sort,:]
+        pc =  V[0:kappa,:]
+        s_eigvals = s_eigvals[0:kappa]
+
+        return pc.T, kappa, s_eigvals
+    else:
+        U, s, V = np.linalg.svd(Sigma)
+        pc =  V[0:o_dim,:]
+        return pc.T
 
 # Calculate parameters from the train data
 def dim_reductionNDR(X, i_dim, o_dim, g_size, alpha):
@@ -63,13 +87,17 @@ def dim_reductionNDR(X, i_dim, o_dim, g_size, alpha):
         Level[len(Level)-1].scaler.append(preprocessing.StandardScaler(with_mean = False, with_std = True).fit(X))
         D_scaled = Level[len(Level)-1].scaler[0].transform(X)
         Sigma = dependence_calculation(D_scaled)
-        V = gen_red_vectors(o_dim, Sigma)
+        V = gen_red_vectors(o_dim, Sigma, alpha)
         Level[len(Level)-1].group_transformation.append(V)
         T = D_scaled.dot(V)
         return Level, T
+
     prev = 0
+
+    # Main loop for the dimension reduction
     while i_dim >= o_dim:
         print("input dim", i_dim)
+
         # Stopping conditions
         if (i_dim/float(g_size)) < o_dim:
             Final = X
@@ -82,57 +110,61 @@ def dim_reductionNDR(X, i_dim, o_dim, g_size, alpha):
         if prev == i_dim:
             Level[len(Level)-1].flag = 1
         prev = i_dim;
-        # Define the initial arrays for our calculation
-        Temp_proj =np.zeros([i_len,1])
+
+        # Define a simple extra array
+        Temp_proj = np.zeros([i_len,1])
+
         # First create all the groups
         for i in xrange(0, i_dim, g_size):
             if (i+g_size) < i_dim and (i+2*g_size) > i_dim:
                 F = i_dim;
             else:
                 F = i+g_size;
+
             if F <= i_dim:
                 Level[len(Level)-1].G_LIST.append([j for j in xrange(i,F)])
+        
         if len(Level[len(Level)-1].G_LIST) == 0:
             break
+
         eigen_final = [];
         for element in Level[len(Level)-1].G_LIST:
             temp = np.array(X[:, np.array(element)]).astype(float)
+
             Level[len(Level)-1].scaler.append(preprocessing.StandardScaler(\
-            with_mean = False, with_std = True).fit(temp))
+            with_mean = False, with_std = False).fit(temp))
+
             D_scaled = Level[len(Level)-1].scaler[len(Level[len(Level)-1].scaler)\
             -1].transform(temp)
             
             # Get the dependency matrix for the group
-            Sigma = dependence_calculation(D_scaled)
-            # Sigma = np.corrcoef(D_scaled.T)
-            # Next achieve the parameters for transformation
-            e_vals = LA.eigvals(Sigma)
-            # Sort both the eigen value and eigenvector in descending order
-            arg_sort  = e_vals.argsort()[::-1][:]
-            s_eigvals = e_vals[arg_sort]
-            s_eigvals = np.divide(s_eigvals, float(np.sum(s_eigvals)));
-            tempsum = np.cumsum(s_eigvals)
-            mask = tempsum >= alpha
-            temp_number = ((len(tempsum)-len(tempsum[mask]))+1)
+            Sigma = dependence_calculation(D_scaled, 12) 
+            # Sigma = np.cov(D_scaled.T)
 
-            V = gen_red_vectors(temp_number, Sigma)
+            # Get the transformation parameters
+            V, temp_number, s_eigvals  = gen_red_vectors(0, Sigma, alpha)
 
+            # Perform the transformation and keep all the transformed variables in the same block.
             Temp_proj = np.column_stack([Temp_proj, D_scaled.dot(V)])
+
             # Finally get the eigen values and eigenvectors we are carrying
             # forward from this group
             Level[len(Level)-1].group_transformation.append(V)
-            eigen_final.extend(e_vals[0:temp_number].astype(np.float).tolist())
+            eigen_final.extend(s_eigvals.astype(np.float).tolist())
 
         # Next prepare for the level transformaiton
         T = Temp_proj[:,1:Temp_proj.shape[1]]
+
         pre_shuffle = np.divide(eigen_final, np.sum(eigen_final)).argsort()[::-1][:]
         T = T[:,pre_shuffle]
         # Get the next set of groupings and store the shuffling inside an array
         X, t_shuffling= novel_groups(T, g_size)
         Level[len(Level)-1].level_shuffling.append(pre_shuffle)
         Level[len(Level)-1].level_shuffling.append(t_shuffling)
+
         # I can start the next level
         i_dim = X.shape[1]
+
     return Level, Final
 
 ## Transform the test samples
@@ -154,6 +186,8 @@ def dim_reductionNDR_test(X, Level, i_dim, o_dim, g_size):
         T = Temp_proj[:,1:Temp_proj.shape[1]]
         X = T[:,Level[p].level_shuffling[0]]
         X = X[:,Level[p].level_shuffling[1]]
+    
+        X = T
         i_dim = X.shape[1]
         p = p+1;
 

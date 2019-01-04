@@ -1,49 +1,59 @@
 ####################################################################
 # Big Data Analysis
-# Library  1.0 (Paper One)
+# Library  2.0 (Paper One)
 # Header File Definitions
-from math import *
+
 import numpy as np
 ########################################################################
 from scipy.spatial.distance  import pdist, squareform, euclidean
-## Distance Correlation calculation
-def distance_covariance(x,y):
-        x = np.reshape(x, [-1,1])
-        y = np.reshape(y, [-1,1])
-        N = x.shape[0]
 
-        # First Distance Matrix
-        A = squareform(pdist(x, 'euclidean'))
-        # Centering the symmetric NxN kernel matrix.
-        one_n = np.ones((N,N)) / N
-        temp = one_n.dot(A)
-        A = A - temp - A.dot(one_n) + temp.dot(one_n)
+# If one, get correlation or get covariance
+def distcorr(X, Y, corr = 1):
+    """ Compute the distance correlation function
+    >>> a = [1,2,3,4,5]
+    >>> b = np.array([1,2,9,4,4])
+    >>> distcorr(a, b)
+    0.762676242417
+    """
+    X = np.atleast_1d(X)
+    Y = np.atleast_1d(Y)
+    if np.prod(X.shape) == len(X):
+        X = X[:, None]
+    if np.prod(Y.shape) == len(Y):
+        Y = Y[:, None]
+    X = np.atleast_2d(X)
+    Y = np.atleast_2d(Y)
+    n = X.shape[0]
 
-        # Second Distance Matrix
-        B= squareform(pdist(y, 'euclidean'))
-        temp = one_n.dot(B)
-        # Centering the symmetric NxN kernel matrix.
-        B = B - temp - B.dot(one_n) + temp.dot(one_n)
+    if Y.shape[0] != X.shape[0]:
+        raise ValueError('Number of samples must match')
 
-        nu_xy = (1/float(N))*np.sqrt(np.sum(np.multiply(A, B)))
-        nu_xx = (1/float(N))*np.sqrt(np.sum(A**2))
-        nu_yy = (1/float(N))*np.sqrt(np.sum((B**2)))
-        if nu_xx*nu_xy < 1e-3:
-            return 1e-3
-        else:
-            return nu_xy/np.sqrt(nu_xx*nu_yy)
+    a = squareform(pdist(X))
+    b = squareform(pdist(Y))
+    A = a - a.mean(axis=0)[None, :] - a.mean(axis=1)[:, None] + a.mean()
+    B = b - b.mean(axis=0)[None, :] - b.mean(axis=1)[:, None] + b.mean()
+    
+    if corr ==1:
+        dcov2_xy = (A * B).sum()/float(n * n)
+        dcov2_xx = (A * A).sum()/float(n * n)
+        dcov2_yy = (B * B).sum()/float(n * n)
+        return(np.sqrt(dcov2_xy)/np.sqrt(np.sqrt(dcov2_xx) * np.sqrt(dcov2_yy))) 
+    else:
+        return( (A * B).sum()/float(n * n) )
+
 
 ## Dependence Matrix calculation
-def dependence_calculation(X):
-    print("Dependencies")
+def dependence_calculation(X, corr = 1):
     m   = X.shape[1];
     C   = np.zeros((m,m))
     rng = np.random.RandomState(0)
-    P   = X[ rng.randint(X.shape[0], size= 1000 ), :]
+    P   = X[rng.randint(X.shape[0], size= 100),:]
     for i in xrange(m):
-        for j in xrange(i+1):
-            if i == j:
+        for j in xrange(i+1): 
+            if i == j and corr ==1:
                 C[i][j] = 1.0
-            C[i][j] = distance_covariance(P[:,i], P[:,j]);
-            C[j][i] = C[i][j]
+            else:
+                C[i][j] = distcorr(P[:,i], P[:,j], corr);
+            C[i][j] = distcorr(P[:,i], P[:,j], corr);
+            C[j][i] = C[i][j];
     return C
